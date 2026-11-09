@@ -137,6 +137,21 @@ AniLiberty публикует каждый сезон отдельным рел�
    docker compose up -d
    ```
 
+### Dev-сборка из исходников
+
+Для разработки и тестирования изменений образ собирается из локального кода через `Dockerfile.dev`. Файл `.env` необязателен, кэш списка соответствий сохраняется в `./data`.
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
+После правок кода повторите ту же команду, чтобы пересобрать и перезапустить контейнер. Логи и остановка:
+
+```bash
+docker compose -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml down
+```
+
 ## Запуск Go-бинарника
 
 Вы можете скачать уже готовый скомпилированный бинарник для вашей ОС (Linux, Windows, macOS) из раздела [Releases](https://github.com/retrilzzy/aniliberty-indexer/releases/latest) или собрать его самостоятельно:
