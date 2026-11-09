@@ -187,6 +187,15 @@ func shiftEpisodes(episodes string, offset int) string {
 	return shifted
 }
 
+// Season and the offset added to AniLiberty episode numbers, as used in the release title
+func TVNumbering(release api.Release) (season int, offset int) {
+	info := resolveTV(release)
+	if info.Mapped {
+		offset = info.EpisodeOffset
+	}
+	return info.Season, offset
+}
+
 // Episodes of a torrent in TVDB numbering
 func tvEpisodes(torrent api.Torrent, info tvInfo) string {
 	episodes := extractEpisodes(torrent.Label)

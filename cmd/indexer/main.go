@@ -4,6 +4,7 @@ import (
 	"aniliberty-indexer/internal/api"
 	"aniliberty-indexer/internal/config"
 	"aniliberty-indexer/internal/mapping"
+	"aniliberty-indexer/internal/qbit"
 	"aniliberty-indexer/internal/server"
 	"aniliberty-indexer/internal/torznab"
 
@@ -18,6 +19,7 @@ func main() {
 	if config.SEASON_MAPPING {
 		api.StartCatalogIndexer()
 	}
+	qbitState := qbit.Start()
 
 	displayHost := config.HOST
 
@@ -84,6 +86,7 @@ func main() {
 ║  API Key:        %s
 ║  Upstream proxy: %s
 ║  Season mapping: %s
+║  qBit renamer:   %s
 ║
 ║  TV Template:    %s
 ║  TV Example:     %s
@@ -91,7 +94,7 @@ func main() {
 ║  Movie Template: %s
 ║  Movie Example:  %s
 ╚═══
-`, displayHost, config.PORT, apiKeyState, config.PingProxy(), mappingState, config.TORRENT_TITLE_TEMPLATE, exampleTVTitle, config.TORRENT_MOVIE_TITLE_TEMPLATE, exampleMovieTitle)
+`, displayHost, config.PORT, apiKeyState, config.PingProxy(), mappingState, qbitState, config.TORRENT_TITLE_TEMPLATE, exampleTVTitle, config.TORRENT_MOVIE_TITLE_TEMPLATE, exampleMovieTitle)
 
 	if err := http.ListenAndServe(config.HOST+":"+config.PORT, nil); err != nil {
 		log.Fatalf("Server error: %v\n", err)

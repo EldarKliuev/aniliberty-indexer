@@ -3,8 +3,10 @@ package api
 import (
 	"aniliberty-indexer/internal/config"
 
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"sync"
 )
@@ -90,4 +92,24 @@ func SearchTorrents(query string, limit int) ([]CombinedItem, error) {
 		results = results[:limit]
 	}
 	return results, nil
+}
+
+// Looks up a torrent by infohash; found is false when AniLiberty does not know the hash
+func FetchTorrentByHash(hash string) (item CombinedItem, found bool, err error) {
+	apiUrl := fmt.Sprintf("%s/anime/torrents/%s", config.ANILIBERTY_API, url.PathEscape(hash))
+	var data struct {
+		Torrent
+		Release Release `json:"release"`
+	}
+	if err := FetchJSON(apiUrl, &data); err != nil {
+		var se *StatusError
+		if errors.As(err, &se) && se.Code == http.StatusNotFound {
+			return CombinedItem{}, false, nil
+		}
+		return CombinedItem{}, false, err
+	}
+	if data.Release.ID == 0 {
+		return CombinedItem{}, false, nil
+	}
+	return CombinedItem{Release: data.Release, Torrent: data.Torrent}, true, nil
 }

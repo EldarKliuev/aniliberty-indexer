@@ -47,6 +47,15 @@ var (
 	CATALOG_REFRESH_INTERVAL = 6 * time.Hour
 	// Directory for cached data (mapping list); empty disables the disk cache
 	DATA_DIR = "data"
+
+	// qBittorrent WebUI for renaming AniLiberty episode files (empty disables the renamer)
+	QBIT_URL      = ""
+	QBIT_USERNAME = ""
+	QBIT_PASSWORD = ""
+	// Only torrents in this qBittorrent category are checked (empty = all)
+	QBIT_CATEGORY = ""
+	// How often qBittorrent torrents are checked
+	QBIT_RENAME_INTERVAL = 60 * time.Second
 )
 
 // Map of placeholders supported in TORRENT_TITLE_TEMPLATE
@@ -159,6 +168,18 @@ func init() {
 	}
 	if d, ok := os.LookupEnv("DATA_DIR"); ok {
 		DATA_DIR = d
+	}
+
+	if u := os.Getenv("QBIT_URL"); u != "" {
+		QBIT_URL = strings.TrimRight(u, "/")
+	}
+	QBIT_USERNAME = os.Getenv("QBIT_USERNAME")
+	QBIT_PASSWORD = os.Getenv("QBIT_PASSWORD")
+	QBIT_CATEGORY = os.Getenv("QBIT_CATEGORY")
+	if v := os.Getenv("QBIT_RENAME_INTERVAL"); v != "" {
+		if val, err := strconv.Atoi(v); err == nil && val > 0 {
+			QBIT_RENAME_INTERVAL = time.Duration(val) * time.Second
+		}
 	}
 
 	if err := ValidateTemplate(TORRENT_TITLE_TEMPLATE); err != nil {

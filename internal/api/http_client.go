@@ -10,6 +10,16 @@ import (
 	"net/http"
 )
 
+// Non-2xx response from AniLiberty API
+type StatusError struct {
+	Code int
+	Body string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.Code, e.Body)
+}
+
 // Request to AniLiberty API; deserializes JSON into target
 func FetchJSON(requestUrl string, target interface{}) error {
 	req, err := http.NewRequest("GET", requestUrl, nil)
@@ -31,7 +41,7 @@ func FetchJSON(requestUrl string, target interface{}) error {
 		if len(bodyStr) > 200 {
 			bodyStr = bodyStr[:200]
 		}
-		return fmt.Errorf("HTTP %d: %s", res.StatusCode, bodyStr)
+		return &StatusError{Code: res.StatusCode, Body: bodyStr}
 	}
 
 	return json.NewDecoder(res.Body).Decode(target)
