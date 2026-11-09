@@ -3,6 +3,7 @@ package server
 import (
 	"aniliberty-indexer/internal/api"
 	"aniliberty-indexer/internal/config"
+	"aniliberty-indexer/internal/mapping"
 	"aniliberty-indexer/internal/torznab"
 
 	"fmt"
@@ -155,21 +156,53 @@ func handleSearch(w http.ResponseWriter, req *http.Request, query url.Values) {
 		cats = []int{2000, 2030, 2040, 2045, 2050, 2070}
 	}
 
-	var season int
-	if s, err := strconv.Atoi(query.Get("season")); err == nil {
-		season = s
+	season, seasonSet := 0, false
+	if s, err := strconv.Atoi(query.Get("season")); err == nil && s >= 0 {
+		season, seasonSet = s, true
 	}
 	var ep int
 	if e, err := strconv.Atoi(query.Get("ep")); err == nil {
 		ep = e
 	}
+	var tvdbID int
+	if id, err := strconv.Atoi(strings.TrimPrefix(strings.ToLower(query.Get("tvdbid")), "tvdb")); err == nil && id > 0 {
+		tvdbID = id
+	}
 
-	hasFilter := len(cats) > 0 || season > 0 || ep > 0
+	hasFilter := len(cats) > 0 || seasonSet || ep > 0 || tvdbID > 0
 
 	var items []api.CombinedItem
 	var err error
+	idSearchDone := false
 
-	if q != "" {
+	// Search by TVDB ID: TVDB series -> MAL entries -> AniLiberty releases
+	if tvdbID > 0 && mapping.Loaded() {
+		seasonFilter := -1
+		if seasonSet {
+			seasonFilter = season
+		}
+		var malIDs []int
+		for _, e := range mapping.EntriesForTVDB(tvdbID, seasonFilter) {
+			malIDs = append(malIDs, e.MALID)
+		}
+		releaseIDs := api.ReleaseIDsForMAL(malIDs)
+		log.Printf("[search] tvdbid=%d season=%s mal=%v releases=%v\n", tvdbID, query.Get("season"), malIDs, releaseIDs)
+		if len(releaseIDs) > 0 {
+			items = api.FetchReleasesByIDs(releaseIDs, 0)
+			idSearchDone = true
+		} else if q == "" && api.CatalogReady() {
+			// Nothing on AniLiberty for this series/season
+			idSearchDone = true
+		}
+	}
+
+	if idSearchDone {
+		// items already set
+	} else if tvdbID > 0 && q == "" {
+		// Unknown TVDB ID and no text query: never fall back to the unfiltered latest feed
+		log.Printf("[search] tvdbid=%d not resolved, returning empty result\n", tvdbID)
+		items = []api.CombinedItem{}
+	} else if q != "" {
 		searchLimit := limit
 		if hasFilter && searchLimit < config.MAX_LIMIT*2 {
 			searchLimit = config.MAX_LIMIT * 2
@@ -198,7 +231,9 @@ func handleSearch(w http.ResponseWriter, req *http.Request, query url.Values) {
 		items = torznab.FilterItems(items, torznab.FilterOptions{
 			Categories: cats,
 			Season:     season,
+			SeasonSet:  seasonSet,
 			Episode:    ep,
+			TVDBID:     tvdbID,
 		})
 	}
 

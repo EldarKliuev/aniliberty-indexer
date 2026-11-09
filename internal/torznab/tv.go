@@ -3,6 +3,7 @@ package torznab
 import (
 	"aniliberty-indexer/internal/api"
 	"aniliberty-indexer/internal/config"
+	"aniliberty-indexer/internal/mapping"
 	"fmt"
 	"strconv"
 	"strings"
@@ -133,15 +134,77 @@ func resolutionToTVCategories(res string) []int {
 	return cats
 }
 
+// TVDB placement of a TV release
+type tvInfo struct {
+	Season        int
+	TVDBID        int // 0 when unknown
+	EpisodeOffset int
+	Mapped        bool // season comes from the MAL -> TVDB mapping, not from the title
+}
+
+// Guesses the season number from the Latin title, then the Russian one
+func titleSeason(release api.Release) int {
+	season := extractSeason(release.Name.Latin)
+	if season == 1 && extractSeason(release.Name.Main) > 1 {
+		season = extractSeason(release.Name.Main)
+	}
+	return season
+}
+
+// Resolves season, TVDB ID and episode offset, preferring the mapping list over title parsing
+func resolveTV(release api.Release) tvInfo {
+	if e, ok := mapping.Lookup(release.MALID()); ok {
+		if e.HasSeason {
+			return tvInfo{Season: e.Season, TVDBID: e.TVDBID, EpisodeOffset: e.EpisodeOffset, Mapped: true}
+		}
+		return tvInfo{Season: titleSeason(release), TVDBID: e.TVDBID}
+	}
+	return tvInfo{Season: titleSeason(release)}
+}
+
+// Adds an offset to an "E01" / "E01-E12" episode string
+func shiftEpisodes(episodes string, offset int) string {
+	if episodes == "" || offset == 0 {
+		return episodes
+	}
+	shift := func(e string) (string, bool) {
+		n, err := strconv.Atoi(strings.TrimPrefix(e, "E"))
+		if err != nil {
+			return e, false
+		}
+		return "E" + padZero(strconv.Itoa(n+offset)), true
+	}
+	if strings.Contains(episodes, "-") {
+		parts := strings.SplitN(episodes, "-", 2)
+		a, ok1 := shift(parts[0])
+		b, ok2 := shift(parts[1])
+		if !ok1 || !ok2 {
+			return episodes
+		}
+		return a + "-" + b
+	}
+	shifted, _ := shift(episodes)
+	return shifted
+}
+
+// Episodes of a torrent in TVDB numbering
+func tvEpisodes(torrent api.Torrent, info tvInfo) string {
+	episodes := extractEpisodes(torrent.Label)
+	if info.Mapped {
+		episodes = shiftEpisodes(episodes, info.EpisodeOffset)
+	}
+	return episodes
+}
+
 // Constructs a formatted torrent title for a TV series based on the release and torrent data
 func BuildTVTitle(release api.Release, torrent api.Torrent) string {
+	return buildTVTitle(release, torrent, resolveTV(release))
+}
+
+func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo) string {
 	ruName := release.Name.Main
 	latinName := release.Name.Latin
-
-	season := extractSeason(latinName)
-	if season == 1 && extractSeason(ruName) > 1 {
-		season = extractSeason(ruName)
-	}
+	season := info.Season
 
 	cleanLatinName := cleanTitleSeason(latinName)
 
@@ -155,7 +218,7 @@ func BuildTVTitle(release api.Release, torrent api.Torrent) string {
 		codecCleaned = cleanCodec(torrent.Codec.Value)
 	}
 
-	episodes := extractEpisodes(torrent.Label)
+	episodes := tvEpisodes(torrent, info)
 
 	seasonStr := fmt.Sprintf("S%02d", season)
 	seasonEpisodes := seasonStr

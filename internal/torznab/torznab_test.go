@@ -192,7 +192,7 @@ func TestBuildTVTitleSeasonEpisodes(t *testing.T) {
 func TestBuildCapsXML(t *testing.T) {
 	caps := BuildCapsXML()
 	expectedItems := []string{
-		`<tv-search available="yes" supportedParams="q,season,ep" />`,
+		`<tv-search available="yes" supportedParams="q,season,ep,tvdbid" />`,
 		`<movie-search available="yes" supportedParams="q" />`,
 		`<subcat id="2070" name="Movies/Anime" />`,
 		`<subcat id="5070" name="TV/Anime" />`,

@@ -19,6 +19,7 @@ func FetchLatestTorrents(limit int, page int) ([]CombinedItem, error) {
 
 	items := make([]CombinedItem, 0, len(data.Data))
 	for _, item := range data.Data {
+		rememberRelease(item.Release)
 		items = append(items, CombinedItem{
 			Release: item.Release,
 			Torrent: item.Torrent,
@@ -37,6 +38,9 @@ func SearchTorrents(query string, limit int) ([]CombinedItem, error) {
 
 	if len(releases) == 0 {
 		return []CombinedItem{}, nil
+	}
+	for _, r := range releases {
+		rememberRelease(r)
 	}
 
 	var results []CombinedItem

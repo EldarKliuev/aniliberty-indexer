@@ -36,6 +36,17 @@ var (
 	PROXY_DOWNLOADS = false
 	// Base URL for the indexer, used for local download URLs
 	BASE_URL = ""
+
+	// Resolve TVDB season/episode numbering via MAL IDs and the Fribb anime-lists dataset
+	SEASON_MAPPING = true
+	// Source of the MAL -> TVDB mapping list
+	MAPPING_URL = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json"
+	// How often the mapping list is re-downloaded
+	MAPPING_REFRESH_INTERVAL = 24 * time.Hour
+	// How often the AniLiberty catalog (release ID <-> MAL ID index) is re-crawled
+	CATALOG_REFRESH_INTERVAL = 6 * time.Hour
+	// Directory for cached data (mapping list); empty disables the disk cache
+	DATA_DIR = "data"
 )
 
 // Map of placeholders supported in TORRENT_TITLE_TEMPLATE
@@ -126,6 +137,28 @@ func init() {
 	}
 	if b := os.Getenv("BASE_URL"); b != "" {
 		BASE_URL = strings.TrimRight(b, "/")
+	}
+
+	if v := os.Getenv("SEASON_MAPPING"); v != "" {
+		if val, err := strconv.ParseBool(v); err == nil {
+			SEASON_MAPPING = val
+		}
+	}
+	if u := os.Getenv("MAPPING_URL"); u != "" {
+		MAPPING_URL = u
+	}
+	if h := os.Getenv("MAPPING_REFRESH_HOURS"); h != "" {
+		if val, err := strconv.Atoi(h); err == nil && val > 0 {
+			MAPPING_REFRESH_INTERVAL = time.Duration(val) * time.Hour
+		}
+	}
+	if h := os.Getenv("CATALOG_REFRESH_HOURS"); h != "" {
+		if val, err := strconv.Atoi(h); err == nil && val > 0 {
+			CATALOG_REFRESH_INTERVAL = time.Duration(val) * time.Hour
+		}
+	}
+	if d, ok := os.LookupEnv("DATA_DIR"); ok {
+		DATA_DIR = d
 	}
 
 	if err := ValidateTemplate(TORRENT_TITLE_TEMPLATE); err != nil {

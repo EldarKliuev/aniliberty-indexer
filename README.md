@@ -12,6 +12,7 @@
 - [Принцип работы](#принцип-работы)
 - [Переменные окружения](#переменные-окружения)
 - [Настройка шаблона названия](#настройка-шаблона-названия)
+- [Определение сезонов по TVDB](#определение-сезонов-по-tvdb)
 - [Запуск в Docker](#запуск-в-docker)
 - [Запуск Go-бинарника](#запуск-go-бинарника)
 - [Добавление и настройка в Prowlarr](#добавление-и-настройка-в-prowlarr)
@@ -22,7 +23,8 @@
 
 ## Особенности
 
-- **Продвинутый парсинг**: Точное автоматическое извлечение номеров сезонов и серий из названий и меток торрентов.
+- **Сезоны по TVDB**: Номер сезона и нумерация серий берутся из TheTVDB по MAL ID релиза (список [Fribb/anime-lists](https://github.com/Fribb/anime-lists)), поэтому `Kimetsu no Yaiba: Yuukaku-hen` попадает в Sonarr как S03, а не S01. Поддерживается поиск по `tvdbid`.
+- **Продвинутый парсинг**: Извлечение номеров сезонов и серий из названий и меток торрентов, если релиза нет в списке соответствий.
 - **Гибкие шаблоны**: Настраиваемый формат заголовков раздач с автоматической очисткой от пустых скобок и артефактов.
 - **Извлечение метаданных**: Распознавание года, разрешения (1080p, 720p), типа источника (BDRip, WEBRip) и кодека (x264, x265).
 - **Стандарт Torznab**: Полноценная поддержка Torznab API для работы с Prowlarr, Sonarr и Radarr (поиск `search`/`tvsearch`/`movie`, RSS-лента и capabilities).
@@ -33,7 +35,7 @@
 
 1. **Запрос**: Принимает Torznab-запрос от Prowlarr/Sonarr/Radarr.
 2. **Поиск**: Запрашивает релизы и торренты через API AniLiberty.
-3. **Парсинг и адаптация**: Извлекает сезон, серии, качество, кодек и формирует название по шаблону.
+3. **Парсинг и адаптация**: Определяет сезон и серии по TVDB (или по названию), извлекает качество и кодек и формирует название по шаблону.
 4. **Проксирование**: Перенаправляет скачивание `.torrent` файлов через эндпоинт `/download/{hash}`.
 
 ---
@@ -52,6 +54,11 @@
 | `UPSTREAM_PROXY`               | _(пусто)_                         | Опциональный URL прокси-сервера (HTTP, HTTPS, SOCKS5) для запросов к AniLiberty API (например, `socks5://127.0.0.1:1080` или `http://proxy.local:8080`).       |
 | `PROXY_DOWNLOADS`              | `false`                           | Проксировать ссылки скачивания торрентов через локальный эндпоинт `/download/{hash}` (`true`/`false`).                                                         |
 | `BASE_URL`                     | _(пусто)_                         | Базовый публичный URL индексатора (например, `https://aniliberty-indexer.domain.com` или `http://192.168.1.50:3649`), используется при `PROXY_DOWNLOADS=true`. |
+| `SEASON_MAPPING`               | `true`                            | Определять сезон и нумерацию серий по TVDB через MAL ID релиза (`true`/`false`). [Подробнее](#определение-сезонов-по-tvdb).                                     |
+| `MAPPING_URL`                  | [Fribb/anime-lists](https://github.com/Fribb/anime-lists) | Адрес JSON-списка соответствий MAL → TVDB (`anime-list-full.json`).                                                                  |
+| `MAPPING_REFRESH_HOURS`        | `24`                              | Как часто (в часах) заново скачивать список соответствий.                                                                                                      |
+| `CATALOG_REFRESH_HOURS`        | `6`                               | Как часто (в часах) заново обходить каталог AniLiberty для поиска по `tvdbid`.                                                                                 |
+| `DATA_DIR`                     | `data` (`/data` в Docker)         | Каталог для кэша списка соответствий. Пустое значение отключает кэш на диске.                                                                                  |
 
 ## Настройка шаблона названия
 
@@ -94,6 +101,26 @@
    ```
    Результат для сериала:
    `[AniLiberty] Monogatari Series - S02E01-S02E23 [RUS][BDRip 1080p x264] (2013)`
+
+## Определение сезонов по TVDB
+
+AniLiberty публикует каждый сезон отдельным релизом, и номер сезона часто не указан в названии (`Kimetsu no Yaiba: Yuukaku-hen`, `Tokyo Revengers: Santen Sensou-hen`). Sonarr же ищет и сопоставляет раздачи по сезонам TheTVDB.
+
+Поэтому при `SEASON_MAPPING=true` индексатор:
+
+1. Берёт MAL ID релиза из API AniLiberty (поле `mal`, при его отсутствии — `shikimori`).
+2. Находит по нему сериал TVDB, сезон и смещение серий в списке [Fribb/anime-lists](https://github.com/Fribb/anime-lists). Список скачивается при старте, кэшируется в `DATA_DIR` и обновляется раз в `MAPPING_REFRESH_HOURS` часов.
+3. Подставляет сезон в `{season}`/`{season_episodes}`, сдвигает номера серий для вторых частей сезонов (например, `Yozakura-san Chi no Daisakusen 2nd Season Part 2` серии `1-4` → `S02E13-S02E16`) и добавляет атрибуты `tvdbid`, `season`, `episode`.
+4. Принимает поиск `tvsearch` с параметром `tvdbid`: находит все релизы AniLiberty этого сериала (и сезона, если он передан) через индекс каталога, который обновляется раз в `CATALOG_REFRESH_HOURS` часов.
+
+Если релиза нет в списке или список недоступен, сезон определяется по названию, как раньше.
+
+| Релиз AniLiberty                           | По названию | По TVDB |
+| ------------------------------------------ | ----------- | ------- |
+| `Kimetsu no Yaiba: Mugen Ressha-hen (TV)`  | S01         | S02     |
+| `Kimetsu no Yaiba: Yuukaku-hen`            | S01         | S03     |
+| `Tokyo Revengers: Santen Sensou-hen`       | S01         | S04     |
+| `Diamond no Ace: Act II Second Season Part 2` | S02      | S04, серии +13 |
 
 ---
 
@@ -248,7 +275,7 @@ Content-Type: application/xml; charset=utf-8
   <limits max="50" default="25"/>
   <searching>
     <search available="yes" supportedParams="q"/>
-    <tv-search available="yes" supportedParams="q,season,ep"/>
+    <tv-search available="yes" supportedParams="q,season,ep,tvdbid"/>
     <movie-search available="yes" supportedParams="q"/>
   </searching>
   <categories>
@@ -288,6 +315,7 @@ _(Поддерживаются также алиасы: `/torznab`, `/torznab/ap
 | `cat`    | `string`  | Не задан     | Категории через запятую (например, `5070` или `2000,2070`)                                                                                                   |
 | `season` | `integer` | Не задан     | Номер сезона для `tvsearch` (например, `1`, `2`)                                                                                                             |
 | `ep`     | `integer` | Не задан     | Номер серии для `tvsearch` (например, `5`)                                                                                                                   |
+| `tvdbid` | `integer` | Не задан     | ID сериала в TheTVDB для `tvsearch`. Релизы ищутся по списку соответствий, `q` при этом не обязателен (нужен `SEASON_MAPPING=true`).                           |
 | `limit`  | `integer` | `25`         | Количество результатов на страницу (максимум `50`)                                                                                                           |
 | `offset` | `integer` | `0`          | Количество пропускаемых записей (смещение) для пагинации                                                                                                     |
 
@@ -325,6 +353,7 @@ Content-Type: application/xml; charset=utf-8
             <torznab:attr name="resolution" value="1080"/>
             <torznab:attr name="poster" value="/storage/releases/posters/8424/Pt0yaatoRpp2adNWT8CZgYkWmzyLo1kQ.webp"/>
             <torznab:attr name="year" value="2019"/>
+            <torznab:attr name="tvdbid" value="359274"/>
             <torznab:attr name="season" value="1"/>
         </item>
     </channel>

@@ -12,6 +12,8 @@ COPY internal/ ./internal/
 
 RUN CGO_ENABLED=0 go build -o aniliberty-indexer ./cmd/indexer/
 
+ENV DATA_DIR=/app/data
+
 EXPOSE 3649
 
 CMD ["./aniliberty-indexer"]

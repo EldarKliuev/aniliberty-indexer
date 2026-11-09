@@ -10,12 +10,18 @@ import (
 type FilterOptions struct {
 	Categories []int
 	Season     int
+	SeasonSet  bool // filter by Season even when it is 0 (TVDB specials)
 	Episode    int
+	TVDBID     int
+}
+
+func (o FilterOptions) hasSeason() bool {
+	return o.SeasonSet || o.Season > 0
 }
 
 // Filters combined items by category, season, and episode
 func FilterItems(items []api.CombinedItem, opts FilterOptions) []api.CombinedItem {
-	if len(opts.Categories) == 0 && opts.Season <= 0 && opts.Episode <= 0 {
+	if len(opts.Categories) == 0 && !opts.hasSeason() && opts.Episode <= 0 && opts.TVDBID <= 0 {
 		return items
 	}
 
@@ -58,16 +64,24 @@ func itemMatches(item api.CombinedItem, opts FilterOptions) bool {
 		}
 	}
 
+	var tv tvInfo
+	if !isMovie {
+		tv = resolveTV(item.Release)
+	}
+
+	// Filter by TVDB series (releases without a known TVDB ID are kept)
+	if opts.TVDBID > 0 {
+		if isMovie || (tv.TVDBID > 0 && tv.TVDBID != opts.TVDBID) {
+			return false
+		}
+	}
+
 	// Filter by season
-	if opts.Season > 0 {
+	if opts.hasSeason() {
 		if isMovie {
 			return false
 		}
-		season := extractSeason(item.Release.Name.Latin)
-		if season == 1 && extractSeason(item.Release.Name.Main) > 1 {
-			season = extractSeason(item.Release.Name.Main)
-		}
-		if season != opts.Season {
+		if tv.Season != opts.Season {
 			return false
 		}
 	}
@@ -77,7 +91,7 @@ func itemMatches(item api.CombinedItem, opts FilterOptions) bool {
 		if isMovie {
 			return false
 		}
-		epStr := extractEpisodes(item.Torrent.Label)
+		epStr := tvEpisodes(item.Torrent, tv)
 		if epStr != "" {
 			if strings.Contains(epStr, "-") {
 				parts := strings.SplitN(epStr, "-", 2)

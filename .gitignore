@@ -2,3 +2,5 @@
 aniliberty-indexer
 .vscode/
 dist/
+data/
+.idea/

@@ -56,20 +56,17 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 
 		res := qualityToResolution(torrent.Quality.Value)
 
-		var season int
+		var tv tvInfo
 		var epAttr string
 
 		if isMovie {
 			title = BuildMovieTitle(release, torrent)
 			cats = resolutionToMovieCategories(res)
 		} else {
-			title = BuildTVTitle(release, torrent)
+			tv = resolveTV(release)
+			title = buildTVTitle(release, torrent, tv)
 			cats = resolutionToTVCategories(res)
-			season = extractSeason(release.Name.Latin)
-			if season == 1 && extractSeason(release.Name.Main) > 1 {
-				season = extractSeason(release.Name.Main)
-			}
-			epAttr = parseEpisodeAttr(extractEpisodes(torrent.Label))
+			epAttr = parseEpisodeAttr(tvEpisodes(torrent, tv))
 		}
 
 		hash := torrent.Hash
@@ -169,8 +166,11 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 			writeTorznabAttr(&sb, "year", release.Year)
 		}
 		if !isMovie {
-			if season > 0 {
-				writeTorznabAttr(&sb, "season", season)
+			if tv.TVDBID > 0 {
+				writeTorznabAttr(&sb, "tvdbid", tv.TVDBID)
+			}
+			if tv.Season > 0 || tv.Mapped {
+				writeTorznabAttr(&sb, "season", tv.Season)
 			}
 			if epAttr != "" {
 				writeTorznabAttr(&sb, "episode", epAttr)
@@ -192,7 +192,7 @@ func BuildCapsXML() string {
 <limits max="50" default="25" />
 <searching>
 <search available="yes" supportedParams="q" />
-<tv-search available="yes" supportedParams="q,season,ep" />
+<tv-search available="yes" supportedParams="q,season,ep,tvdbid" />
 <movie-search available="yes" supportedParams="q" />
 </searching>
 <categories>
