@@ -136,6 +136,7 @@ AniLiberty публикует каждый сезон отдельным рел�
    ```bash
    docker compose up -d
    ```
+   _Кэш списка соответствий сезонов сохраняется в Docker volume `aniliberty-data`, поэтому при перезапуске его не нужно скачивать заново._
 
 ### Dev-сборка из исходников
 
@@ -154,7 +155,7 @@ docker compose -f docker-compose.dev.yml down
 
 ## Запуск Go-бинарника
 
-Вы можете скачать уже готовый скомпилированный бинарник для вашей ОС (Linux, Windows, macOS) из раздела [Releases](https://github.com/retrilzzy/aniliberty-indexer/releases/latest) или собрать его самостоятельно:
+Вы можете скачать уже готовый скомпилированный бинарник для вашей ОС (Linux, Windows, macOS) из раздела [Releases](https://github.com/EldarKliuev/aniliberty-indexer/releases/latest) или собрать его самостоятельно:
 
 1. Соберите бинарник:
    ```bash
@@ -184,10 +185,14 @@ docker compose -f docker-compose.dev.yml down
    ExecStart=/opt/aniliberty-indexer/aniliberty-indexer
    Restart=always
    EnvironmentFile=/opt/aniliberty-indexer/.env
+   StateDirectory=aniliberty-indexer
+   Environment=DATA_DIR=/var/lib/aniliberty-indexer
 
    [Install]
    WantedBy=multi-user.target
    ```
+
+   _`StateDirectory` создаёт каталог `/var/lib/aniliberty-indexer`, доступный на запись пользователю службы. В нём хранится кэш списка соответствий сезонов, поэтому при перезапуске его не нужно скачивать заново._
 
    После этого выполните команды для регистрации и запуска службы:
 
@@ -209,6 +214,9 @@ docker compose -f docker-compose.dev.yml down
    - **API Path**: `/api`
    - **API Key**: _(оставьте пустым, если `API_KEY` не задан)_.
 5. Нажмите кнопку **Test**, после сохраните настройки (**Save**).
+
+> [!NOTE]
+> Prowlarr запоминает возможности индексатора (`t=caps`) при сохранении. Если индексатор был добавлен до появления поиска по `tvdbid`, откройте его и снова нажмите **Test** и **Save**, а затем выполните **Sync App Indexers**, чтобы Sonarr начал передавать `tvdbid`.
 
 ---
 
@@ -325,7 +333,7 @@ _(Поддерживаются также алиасы: `/torznab`, `/torznab/ap
 
 | Параметр | Тип       | По умолчанию | Описание                                                                                                                                                     |
 | -------- | --------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `t`      | `string`  | Не задан     | Тип поиска: `search`, `tvsearch`, `movie` (если не задан — режим Browse)                                                                                     |
+| `t`      | `string`  | Не задан     | Тип поиска: `search`, `tvsearch` (`tv`), `movie` (`movie-search`, `moviesearch`). Если не задан или `browse` — режим Browse                                  |
 | `q`      | `string`  | Не задан     | Поисковый запрос.<br>• **Задан**: поиск по релизу в API AniLiberty с параллельной загрузкой торрентов.<br>• **Отсутствует**: возвращает ленту свежих раздач. |
 | `cat`    | `string`  | Не задан     | Категории через запятую (например, `5070` или `2000,2070`)                                                                                                   |
 | `season` | `integer` | Не задан     | Номер сезона для `tvsearch` (например, `1`, `2`)                                                                                                             |
@@ -347,9 +355,8 @@ Content-Type: application/xml; charset=utf-8
     <channel>
         <title>AniLiberty</title>
         <link>https://anilibria.top</link>
-        <description>AniLiberty Torznab Feed</description>
         <item>
-            <title>[AniLiberty] Vinland Saga - S01 [RUS][WEBRip 1080p x265] (2019)</title>
+            <title>[AniLiberty] Vinland Saga - S1 [RUS][WEBRip 1080p x265] (2019)</title>
             <guid>04241e64625a3b3fb8e2a5037d0f6bff0dd0a547</guid>
             <link>https://anilibria.top/anime/releases/release/vinland-saga</link>
             <comments>https://anilibria.top/anime/releases/release/vinland-saga</comments>

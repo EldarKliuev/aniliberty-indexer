@@ -8,4 +8,7 @@ services:
     ports:
       - "${PORT:-3649}:${PORT:-3649}"
     volumes:
-      - ./data:/data
+      - aniliberty-data:/data
+
+volumes:
+  aniliberty-data:
