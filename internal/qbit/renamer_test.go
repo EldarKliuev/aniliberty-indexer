@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -61,6 +63,7 @@ type fakeQbit struct {
 	files    map[string][]string
 	renamed  map[string]int // hash -> rename calls
 	calls    map[string]int // hash -> files requests
+	prio     map[string]map[int]int
 }
 
 func (f *fakeQbit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -75,8 +78,12 @@ func (f *fakeQbit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hash := r.URL.Query().Get("hash")
 		f.calls[hash]++
 		var out []File
-		for _, n := range f.files[hash] {
-			out = append(out, File{Name: n})
+		for i, n := range f.files[hash] {
+			p, ok := f.prio[hash][i]
+			if !ok {
+				p = 1
+			}
+			out = append(out, File{Name: n, Priority: p})
 		}
 		json.NewEncoder(w).Encode(out)
 	case "/api/v2/torrents/renameFile":
@@ -88,6 +95,20 @@ func (f *fakeQbit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		f.renamed[hash]++
+	case "/api/v2/torrents/filePrio":
+		r.ParseForm()
+		hash := r.Form.Get("hash")
+		p, _ := strconv.Atoi(r.Form.Get("priority"))
+		if f.prio == nil {
+			f.prio = map[string]map[int]int{}
+		}
+		if f.prio[hash] == nil {
+			f.prio[hash] = map[int]int{}
+		}
+		for _, id := range strings.Split(r.Form.Get("id"), "|") {
+			n, _ := strconv.Atoi(id)
+			f.prio[hash][n] = p
+		}
 	default:
 		http.NotFound(w, r)
 	}
@@ -146,7 +167,7 @@ func TestRenamerOnlyTouchesAniLibertyTVReleases(t *testing.T) {
 		return it, true, nil
 	}
 
-	r := NewRenamer(NewClient(srv.URL, "u", "p"), "", lookup)
+	r := NewRenamer(NewClient(srv.URL, "u", "p"), "", lookup, nil)
 	r.RunOnce()
 	r.RunOnce() // second pass must not repeat any work
 
@@ -188,7 +209,7 @@ func TestRenamerRetriesWithoutMetadata(t *testing.T) {
 		it.Release.Name.Latin = "Show Season 2"
 		return it, true, nil
 	}
-	r := NewRenamer(NewClient(srv.URL, "", ""), "", lookup)
+	r := NewRenamer(NewClient(srv.URL, "", ""), "", lookup, nil)
 	r.RunOnce() // magnet without metadata yet
 
 	fq.mu.Lock()

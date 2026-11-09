@@ -78,3 +78,31 @@ func RelayTorrentFile(upstreamUrl string, w http.ResponseWriter) {
 		log.Printf("[relay] copy error for %s: %v\n", upstreamUrl, err)
 	}
 }
+
+// Downloads a binary resource from AniLiberty (at most 10 MB)
+func FetchBytes(requestUrl string) ([]byte, error) {
+	req, err := http.NewRequest("GET", requestUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "AniLiberty-Indexer/1.0")
+
+	res, err := config.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(res.Body, 10<<20))
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		bodyStr := string(body)
+		if len(bodyStr) > 200 {
+			bodyStr = bodyStr[:200]
+		}
+		return nil, &StatusError{Code: res.StatusCode, Body: bodyStr}
+	}
+	return body, nil
+}

@@ -51,6 +51,13 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 
 		isMovie := release.Type.Value == "MOVIE"
 
+		// A single episode out of a pack needs the local download endpoint,
+		// which remembers the files to download
+		pick := item.Episode
+		if isMovie || currentBaseURL == "" {
+			pick = nil
+		}
+
 		var title string
 		var cats []int
 
@@ -64,12 +71,18 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 			cats = resolutionToMovieCategories(res)
 		} else {
 			tv = resolveTV(release)
-			title = buildTVTitle(release, torrent, tv)
+			episodes := tvEpisodes(torrent, tv)
+			if pick != nil {
+				episodes = "E" + padZero(strconv.Itoa(pick.Episode))
+			}
+			title = buildTVTitle(release, torrent, tv, episodes)
 			cats = resolutionToTVCategories(res)
-			epAttr = parseEpisodeAttr(tvEpisodes(torrent, tv))
+			epAttr = parseEpisodeAttr(episodes)
 		}
 
 		hash := torrent.Hash
+		guid := hash
+		size := torrent.Size
 
 		releaseAlias := release.Alias
 		if releaseAlias == "" && release.ID != 0 {
@@ -85,6 +98,16 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 			}
 		}
 		magnetUrl := torrent.Magnet
+		if pick != nil {
+			downloadUrl = fmt.Sprintf("%s/download/%s?files=%s", currentBaseURL, hash, FormatFileIndices(pick.Files))
+			if config.API_KEY != "" {
+				downloadUrl += "&apikey=" + url.QueryEscape(config.API_KEY)
+			}
+			// A magnet would bypass the endpoint and download the whole pack
+			magnetUrl = ""
+			guid = fmt.Sprintf("%s-E%02d", hash, pick.Episode)
+			size = pick.Size
+		}
 
 		pubDate := time.Now().UTC().Format(time.RFC1123)
 		if torrent.UpdatedAt != "" {
@@ -121,15 +144,15 @@ func BuildTorznabXML(items []api.CombinedItem, baseURL ...string) string {
 %s<enclosure url="%s" length="%d" type="application/x-bittorrent" />
 `,
 			escapeXML(title),
-			escapeXML(hash),
+			escapeXML(guid),
 			escapeXML(detailsUrl),
 			escapeXML(detailsUrl),
 			escapeXML(pubDate),
-			torrent.Size,
+			size,
 			escapeXML(description),
 			catXml.String(),
 			escapeXML(downloadUrl),
-			torrent.Size,
+			size,
 		))
 
 		if magnetUrl != "" {

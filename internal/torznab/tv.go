@@ -207,10 +207,12 @@ func tvEpisodes(torrent api.Torrent, info tvInfo) string {
 
 // Constructs a formatted torrent title for a TV series based on the release and torrent data
 func BuildTVTitle(release api.Release, torrent api.Torrent) string {
-	return buildTVTitle(release, torrent, resolveTV(release))
+	info := resolveTV(release)
+	return buildTVTitle(release, torrent, info, tvEpisodes(torrent, info))
 }
 
-func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo) string {
+// episodes is in TVDB numbering ("E01-E12", "E03" or empty)
+func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo, episodes string) string {
 	ruName := release.Name.Main
 	latinName := release.Name.Latin
 	season := info.Season
@@ -226,8 +228,6 @@ func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo) string 
 	if torrent.Codec.Value != "" {
 		codecCleaned = cleanCodec(torrent.Codec.Value)
 	}
-
-	episodes := tvEpisodes(torrent, info)
 
 	seasonStr := fmt.Sprintf("S%02d", season)
 	seasonEpisodes := seasonStr
@@ -267,5 +267,24 @@ func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo) string 
 		}
 	}
 
-	return RenderTemplate(config.TORRENT_TITLE_TEMPLATE, getValue)
+	tpl := config.TORRENT_TITLE_TEMPLATE
+	if episodes != "" && !strings.Contains(episodes, "-") {
+		tpl = singleEpisodeTemplate(tpl)
+	}
+	return RenderTemplate(tpl, getValue)
+}
+
+// A template without episode placeholders ("S{season}") names a single episode
+// like a season pack, and Sonarr would grab it as the whole season. Such
+// templates get {season_episodes} instead of S{season}, or appended to the end.
+func singleEpisodeTemplate(tpl string) string {
+	if strings.Contains(tpl, "{episodes}") || strings.Contains(tpl, "{season_episodes}") {
+		return tpl
+	}
+	for _, marker := range []string{"S{season}", "s{season}"} {
+		if strings.Contains(tpl, marker) {
+			return strings.Replace(tpl, marker, "{season_episodes}", 1)
+		}
+	}
+	return tpl + " {season_episodes}"
 }

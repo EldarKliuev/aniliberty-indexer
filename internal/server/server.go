@@ -4,6 +4,7 @@ import (
 	"aniliberty-indexer/internal/api"
 	"aniliberty-indexer/internal/config"
 	"aniliberty-indexer/internal/mapping"
+	"aniliberty-indexer/internal/qbit"
 	"aniliberty-indexer/internal/torznab"
 
 	"fmt"
@@ -40,6 +41,10 @@ func HandleRequest(w http.ResponseWriter, req *http.Request) {
 	// Relay a .torrent file from AniLiberty API to the client
 	if strings.HasPrefix(pathname, "/download/") {
 		hashOrId := strings.TrimPrefix(pathname, "/download/")
+		// Single-episode item: only these files of the pack are to be downloaded
+		if files := query.Get("files"); files != "" {
+			qbit.SelectFiles(hashOrId, torznab.ParseFileIndices(files))
+		}
 		pk := query.Get("pk")
 		downloadUrl := fmt.Sprintf("%s/anime/torrents/%s/file", config.ANILIBERTY_API, hashOrId)
 		if pk != "" {
@@ -186,7 +191,7 @@ func handleSearch(w http.ResponseWriter, req *http.Request, query url.Values) {
 			malIDs = append(malIDs, e.MALID)
 		}
 		releaseIDs := api.ReleaseIDsForMAL(malIDs)
-		log.Printf("[search] tvdbid=%d season=%s mal=%v releases=%v\n", tvdbID, query.Get("season"), malIDs, releaseIDs)
+		log.Printf("[search] tvdbid=%d season=%s ep=%s mal=%v releases=%v\n", tvdbID, query.Get("season"), query.Get("ep"), malIDs, releaseIDs)
 		if len(releaseIDs) > 0 {
 			items = api.FetchReleasesByIDs(releaseIDs, 0)
 			idSearchDone = true
@@ -207,7 +212,7 @@ func handleSearch(w http.ResponseWriter, req *http.Request, query url.Values) {
 		if hasFilter && searchLimit < config.MAX_LIMIT*2 {
 			searchLimit = config.MAX_LIMIT * 2
 		}
-		log.Printf("[search] query=\"%s\" limit=%d\n", q, searchLimit)
+		log.Printf("[search] query=\"%s\" season=%s ep=%s limit=%d\n", q, query.Get("season"), query.Get("ep"), searchLimit)
 		items, err = api.SearchTorrents(q, searchLimit)
 	} else {
 		page := 1
@@ -239,6 +244,13 @@ func handleSearch(w http.ResponseWriter, req *http.Request, query url.Values) {
 
 	if len(items) > limit {
 		items = items[:limit]
+	}
+
+	// Episode search: announce packs as the requested episode only. With QBIT_URL set the
+	// other files are skipped after the grab; without it the whole pack is downloaded and
+	// Sonarr imports just the requested episode.
+	if ep > 0 {
+		items = torznab.SplitEpisode(items, ep, api.FetchTorrentFiles)
 	}
 
 	baseURL := config.BASE_URL

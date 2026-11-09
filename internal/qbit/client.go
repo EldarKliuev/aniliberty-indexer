@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -27,9 +28,11 @@ type Torrent struct {
 	Category string `json:"category"`
 }
 
-// File entry from /api/v2/torrents/files
+// File entry from /api/v2/torrents/files; files come in torrent order, so the
+// position in the list is the file id used by /torrents/filePrio
 type File struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	Priority int    `json:"priority"` // 0 = do not download
 }
 
 func NewClient(baseURL, username, password string) *Client {
@@ -75,6 +78,18 @@ func (c *Client) Files(hash string) ([]File, error) {
 func (c *Client) RenameFile(hash, oldPath, newPath string) error {
 	_, err := c.do("POST", "/api/v2/torrents/renameFile", url.Values{
 		"hash": {hash}, "oldPath": {oldPath}, "newPath": {newPath},
+	}, true)
+	return err
+}
+
+// Sets the download priority of files (0 = do not download, 1 = normal)
+func (c *Client) SetFilePriority(hash string, ids []int, priority int) error {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.Itoa(id)
+	}
+	_, err := c.do("POST", "/api/v2/torrents/filePrio", url.Values{
+		"hash": {hash}, "id": {strings.Join(parts, "|")}, "priority": {strconv.Itoa(priority)},
 	}, true)
 	return err
 }

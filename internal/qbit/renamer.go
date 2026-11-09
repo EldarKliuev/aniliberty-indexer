@@ -41,16 +41,17 @@ var (
 type LookupFunc func(hash string) (item api.CombinedItem, found bool, err error)
 
 type Renamer struct {
-	client   *Client
-	category string
-	lookup   LookupFunc
+	client     *Client
+	category   string
+	lookup     LookupFunc
+	selections *Selections
 
 	mu   sync.Mutex
 	done map[string]bool // hashes that need no further work
 }
 
-func NewRenamer(client *Client, category string, lookup LookupFunc) *Renamer {
-	return &Renamer{client: client, category: category, lookup: lookup, done: map[string]bool{}}
+func NewRenamer(client *Client, category string, lookup LookupFunc, selections *Selections) *Renamer {
+	return &Renamer{client: client, category: category, lookup: lookup, selections: selections, done: map[string]bool{}}
 }
 
 // Starts the background renamer if QBIT_URL is set; returns a state string for the banner
@@ -59,14 +60,24 @@ func Start() string {
 		return "disabled"
 	}
 	client := NewClient(config.QBIT_URL, config.QBIT_USERNAME, config.QBIT_PASSWORD)
-	r := NewRenamer(client, config.QBIT_CATEGORY, api.FetchTorrentByHash)
+	sel := DefaultSelections()
+	r := NewRenamer(client, config.QBIT_CATEGORY, api.FetchTorrentByHash, sel)
 	go func() {
 		if err := client.Login(); err != nil {
 			log.Printf("[qbit] %v\n", err)
 		}
 		for {
 			r.RunOnce()
-			time.Sleep(config.QBIT_RENAME_INTERVAL)
+			wait := config.QBIT_RENAME_INTERVAL
+			if sel.hasFresh(time.Now()) && wait > selectionFastPoll {
+				wait = selectionFastPoll
+			}
+			select {
+			case <-time.After(wait):
+			case <-sel.wake:
+				// a single-episode grab: give the client a moment to add the torrent
+				time.Sleep(2 * time.Second)
+			}
 		}
 	}()
 	state := config.QBIT_URL
@@ -83,6 +94,7 @@ func (r *Renamer) RunOnce() {
 		log.Printf("[qbit] list torrents: %v\n", err)
 		return
 	}
+	r.applySelections(torrents)
 	for _, t := range torrents {
 		hash := strings.ToLower(t.Hash)
 		r.mu.Lock()
@@ -145,6 +157,48 @@ func (r *Renamer) process(hash string, t Torrent) (finished bool, err error) {
 		log.Printf("[qbit] renamed %d file(s) in %q to S%02d\n", len(renames), t.Name, season)
 	}
 	return true, nil
+}
+
+// Skips the files of single-episode grabs that were not requested
+func (r *Renamer) applySelections(torrents []Torrent) {
+	if r.selections == nil {
+		return
+	}
+	r.selections.expire(time.Now())
+	pending := r.selections.pending()
+	if len(pending) == 0 {
+		return
+	}
+	for _, t := range torrents {
+		hash := strings.ToLower(t.Hash)
+		wanted, ok := pending[hash]
+		if !ok {
+			continue
+		}
+		files, err := r.client.Files(hash)
+		if err != nil {
+			log.Printf("[qbit] %s (%s): %v\n", t.Name, hash, err)
+			continue
+		}
+		if len(files) == 0 {
+			continue // magnet metadata is not downloaded yet
+		}
+		skip, enable := PlanPriorities(files, wanted)
+		if len(skip) > 0 {
+			if err := r.client.SetFilePriority(hash, skip, 0); err != nil {
+				log.Printf("[qbit] %s (%s): %v\n", t.Name, hash, err)
+				continue
+			}
+		}
+		if len(enable) > 0 {
+			if err := r.client.SetFilePriority(hash, enable, 1); err != nil {
+				log.Printf("[qbit] %s (%s): %v\n", t.Name, hash, err)
+				continue
+			}
+		}
+		r.selections.applied(hash, wanted)
+		log.Printf("[qbit] %q: downloading only files %v (%d skipped)\n", t.Name, wanted, len(files)-len(wanted))
+	}
 }
 
 type Rename struct {

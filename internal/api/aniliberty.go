@@ -2,12 +2,14 @@ package api
 
 import (
 	"aniliberty-indexer/internal/config"
+	"aniliberty-indexer/internal/torrentfile"
 
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -112,4 +114,35 @@ func FetchTorrentByHash(hash string) (item CombinedItem, found bool, err error) 
 		return CombinedItem{}, false, nil
 	}
 	return CombinedItem{Release: data.Release, Torrent: data.Torrent}, true, nil
+}
+
+var (
+	torrentFilesMu    sync.Mutex
+	torrentFilesCache = map[string][]torrentfile.File{}
+)
+
+// Downloads a .torrent from AniLiberty and returns its file list; cached by infohash
+func FetchTorrentFiles(hash string) ([]torrentfile.File, error) {
+	key := strings.ToLower(hash)
+	torrentFilesMu.Lock()
+	files, ok := torrentFilesCache[key]
+	torrentFilesMu.Unlock()
+	if ok {
+		return files, nil
+	}
+
+	apiUrl := fmt.Sprintf("%s/anime/torrents/%s/file", config.ANILIBERTY_API, url.PathEscape(hash))
+	data, err := FetchBytes(apiUrl)
+	if err != nil {
+		return nil, err
+	}
+	files, err = torrentfile.Files(data)
+	if err != nil {
+		return nil, err
+	}
+
+	torrentFilesMu.Lock()
+	torrentFilesCache[key] = files
+	torrentFilesMu.Unlock()
+	return files, nil
 }

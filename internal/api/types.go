@@ -86,6 +86,15 @@ type Torrent struct {
 type CombinedItem struct {
 	Release Release
 	Torrent Torrent
+	// Set when the item announces a single episode out of a multi-episode torrent
+	Episode *EpisodePick
+}
+
+// Single episode picked out of a multi-episode torrent
+type EpisodePick struct {
+	Episode int   // TVDB episode number
+	Files   []int // indices of the episode's files in the torrent
+	Size    int64 // total size of those files
 }
 
 // /anime/torrents API response
