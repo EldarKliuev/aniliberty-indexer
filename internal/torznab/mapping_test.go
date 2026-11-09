@@ -93,14 +93,14 @@ func TestBuildTVTitleWithMapping(t *testing.T) {
 
 	it := tvItem(64503, "Yozakura-san Chi no Daisakusen 2nd Season Part 2", "", "Yozakura - AniLiberty.TOP [WEB-DL 1080p][AVC][1-4]")
 	got := BuildTVTitle(it.Release, it.Torrent)
-	want := "Yozakura-san Chi no Daisakusen Part 2 - S02E13-S02E16"
+	want := "Yozakura-san Chi no Daisakusen Part 2 - S02E13-E16"
 	if got != want {
 		t.Errorf("BuildTVTitle = %q, want %q", got, want)
 	}
 
 	it = tvItem(47778, "Kimetsu no Yaiba: Yuukaku-hen", "", "[WEBRip 1080p][AVC][1-11]")
 	got = BuildTVTitle(it.Release, it.Torrent)
-	want = "Kimetsu no Yaiba: Yuukaku-hen - S03E01-S03E11"
+	want = "Kimetsu no Yaiba: Yuukaku-hen - S03E01-E11"
 	if got != want {
 		t.Errorf("BuildTVTitle = %q, want %q", got, want)
 	}

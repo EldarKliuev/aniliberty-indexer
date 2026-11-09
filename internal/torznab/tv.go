@@ -225,7 +225,7 @@ func buildTVTitle(release api.Release, torrent api.Torrent, info tvInfo) string 
 	if episodes != "" {
 		if strings.Contains(episodes, "-") {
 			parts := strings.SplitN(episodes, "-", 2)
-			seasonEpisodes = seasonStr + parts[0] + "-" + seasonStr + parts[1]
+			seasonEpisodes = seasonStr + parts[0] + "-" + parts[1]
 		} else {
 			seasonEpisodes = seasonStr + episodes
 		}

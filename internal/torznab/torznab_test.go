@@ -163,7 +163,7 @@ func TestBuildTVTitleSeasonEpisodes(t *testing.T) {
 		label    string
 		expected string
 	}{
-		{"[E01-E23]", "[AniLiberty] Monogatari Series - S02E01-S02E23 [RUS][WEBRip 1080p x264] (2013)"},
+		{"[E01-E23]", "[AniLiberty] Monogatari Series - S02E01-E23 [RUS][WEBRip 1080p x264] (2013)"},
 		{"[05]", "[AniLiberty] Monogatari Series - S02E05 [RUS][WEBRip 1080p x264] (2013)"},
 		{"", "[AniLiberty] Monogatari Series - S02 [RUS][WEBRip 1080p x264] (2013)"},
 	}
